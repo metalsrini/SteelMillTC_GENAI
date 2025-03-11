@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mill Test Certificate Analyzer{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar">
+                <div class="position-sticky pt-3">
+                    <h3 class="text-light text-center mb-4">MTC Analyzer</h3>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="{{ url_for('index') }}">
+                                <i class="fas fa-upload me-2"></i>
+                                Upload MTC
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == '/previous' %}active{% endif %}" href="{{ url_for('previous_jobs') }}">
+                                <i class="fas fa-history me-2"></i>
+                                Previous MTCs
+                            </a>
+                        </li>
+                        {% if job_id is defined %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if '/analysis/' in request.path %}active{% endif %}" href="{{ url_for('analysis', job_id=job_id) }}">
+                                <i class="fas fa-chart-pie me-2"></i>
+                                Analysis
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if '/query/' in request.path %}active{% endif %}" href="{{ url_for('query', job_id=job_id) }}">
+                                <i class="fas fa-question-circle me-2"></i>
+                                Query
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if '/raw-text/' in request.path %}active{% endif %}" href="{{ url_for('raw_text', job_id=job_id) }}">
+                                <i class="fas fa-file-alt me-2"></i>
+                                Raw Text
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                    
+                    <!-- API Status Indicator -->
+                    <div class="mt-4 text-center api-status-container">
+                        <p class="text-light mb-1">DeepSeek API Status:</p>
+                        <div id="api-status-badge" class="badge {% if api_available == true %}bg-success{% elif api_available == false %}bg-danger{% else %}bg-secondary{% endif %} mb-2">
+                            {% if api_available == true %}
+                            <i class="fas fa-check-circle"></i> Available
+                            {% elif api_available == false %}
+                            <i class="fas fa-times-circle"></i> Unavailable
+                            {% else %}
+                            <i class="fas fa-question-circle"></i> Unknown
+                            {% endif %}
+                        </div>
+                        <button id="check-api-status" class="btn btn-sm btn-outline-light w-75">
+                            <i class="fas fa-sync-alt"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">{% block header %}Mill Test Certificate Analyzer{% endblock %}</h1>
+                </div>
+
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <!-- Content -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html> 

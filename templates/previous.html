@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Previous MTCs - Steel Mill Test Certificate Analyzer{% endblock %}
+
+{% block header %}Previously Processed MTCs{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="fas fa-history me-2"></i>Previously Processed MTCs</h5>
+    </div>
+    <div class="card-body">
+        {% if jobs %}
+            <div class="row">
+                {% for job in jobs %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100 job-card">
+                            <div class="card-header d-flex justify-content-between align-items-center {% if job.has_structured_data %}bg-success text-white{% else %}bg-warning{% endif %}">
+                                <h6 class="mb-0">
+                                    {% if job.has_structured_data %}
+                                        <i class="fas fa-check-circle me-2"></i>
+                                    {% else %}
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                    {% endif %}
+                                    {{ job.title }}
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-2 small text-muted">
+                                    <i class="fas fa-file me-1"></i> {{ job.original_filename }}
+                                </p>
+                                <p class="mb-2 small text-muted">
+                                    <i class="fas fa-clock me-1"></i> {{ job.timestamp|replace('_', ' ')|replace('T', ' ') }}
+                                </p>
+                                <p class="mb-3 small">
+                                    {% if job.has_structured_data %}
+                                        <span class="badge bg-success">Structured data available</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Raw text only</span>
+                                    {% endif %}
+                                </p>
+                                <div class="d-grid gap-2">
+                                    <a href="{{ url_for('analysis', job_id=job.job_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-chart-pie me-1"></i> View Analysis
+                                    </a>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('raw_text', job_id=job.job_id) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-file-alt me-1"></i> Raw Text
+                                        </a>
+                                        <a href="{{ url_for('query', job_id=job.job_id) }}" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-question-circle me-1"></i> Query
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>No previously processed files found. Upload a certificate to get started.
+            </div>
+            <a href="{{ url_for('index') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-2"></i>Upload Certificate
+            </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

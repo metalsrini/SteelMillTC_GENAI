@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis - Steel Mill Test Certificate Analyzer{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+    .certificate-summary {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background-color: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #dee2e6;
+        line-height: 1.5;
+    }
+    
+    .certificate-summary h1, 
+    .certificate-summary h2, 
+    .certificate-summary h3, 
+    .certificate-summary h4 {
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .certificate-summary h1 {
+        font-size: 1.6rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .certificate-summary h2 {
+        font-size: 1.4rem;
+        border-bottom: 1px solid #6c757d;
+        padding-bottom: 0.3rem;
+    }
+    
+    .certificate-summary .supplier-info {
+        background-color: #e6f5ff;
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .certificate-summary table {
+        width: 100%;
+        margin-bottom: 1.5rem;
+        border-collapse: collapse;
+    }
+    
+    .certificate-summary table th,
+    .certificate-summary table td {
+        padding: 0.5rem;
+        border: 1px solid #dee2e6;
+        text-align: left;
+    }
+    
+    .certificate-summary table th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }
+    
+    .certificate-summary .compliant {
+        color: #28a745;
+        font-weight: bold;
+    }
+    
+    .certificate-summary .non-compliant {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .certificate-summary .missing {
+        color: #ffc107;
+        font-style: italic;
+    }
+    
+    .certificate-summary .emphasis {
+        font-weight: bold;
+    }
+    
+    .certificate-summary .conclusion {
+        background-color: #f0f0f0;
+        border-left: 4px solid #28a745;
+        padding: 1rem;
+        margin-top: 1.5rem;
+    }
+    
+    .certificate-summary .pass:before {
+        content: "✅ ";
+    }
+    
+    .certificate-summary .fail:before {
+        content: "❌ ";
+    }
+    
+    .certificate-summary .unknown:before {
+        content: "⚠️ ";
+    }
+    
+    .certificate-summary .spec {
+        background-color: #fffde7;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.2rem;
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block header %}
+    MTC Analysis: {{ filename }}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('previous_jobs') }}">Previous Certificates</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Analysis</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow mb-4">
+        <div class="card-header bg-gradient d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="fas fa-file-alt me-2"></i>Certificate Analysis</h5>
+            <div>
+                <a href="{{ url_for('raw_text', job_id=job_id) }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-file-alt"></i> View Raw Text
+                </a>
+                <a href="{{ url_for('query', job_id=job_id) }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-question-circle"></i> Query
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Certificate Summary -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary bg-opacity-10">
+                    <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Certificate Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="certificate-summary">
+                        {{ certificate_summary|safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- File Information Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0"><i class="fas fa-info-circle me-2"></i>File Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <th>Filename:</th>
+                                        <td>{{ filename }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Uploaded:</th>
+                                        <td>{{ upload_time }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Job ID:</th>
+                                        <td><code>{{ job_id }}</code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">Extraction Quality:</span>
+                                <div class="progress flex-grow-1 me-2" style="height: 20px;">
+                                    <div class="progress-bar {% if extraction_quality.level == 'high' %}bg-success{% elif extraction_quality.level == 'medium' %}bg-warning{% else %}bg-danger{% endif %}"
+                                        role="progressbar" 
+                                        style="width: {{ extraction_quality.score }}%;" 
+                                        aria-valuenow="{{ extraction_quality.score }}" 
+                                        aria-valuemin="0" 
+                                        aria-valuemax="100">
+                                        {{ extraction_quality.score }}%
+                                    </div>
+                                </div>
+                                <span class="badge {% if extraction_quality.level == 'high' %}bg-success{% elif extraction_quality.level == 'medium' %}bg-warning{% else %}bg-danger{% endif %}">
+                                    {{ extraction_quality.level|upper }}
+                                </span>
+                            </div>
+                            {% if extraction_quality.reasons %}
+                                <div class="alert alert-secondary small mb-0">
+                                    <strong>Notes:</strong>
+                                    <ul class="mb-0 ps-3">
+                                        {% for reason in extraction_quality.reasons %}
+                                            <li>{{ reason }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hidden for now - Will be toggled later if needed -->
+            <div class="card d-none">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="fas fa-table me-2"></i>Detailed Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs mb-3" id="analysisTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="material-tab" data-bs-toggle="tab" data-bs-target="#material" type="button" role="tab" aria-controls="material" aria-selected="true">
+                                <i class="fas fa-certificate me-1"></i> Material Info
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="chemical-tab" data-bs-toggle="tab" data-bs-target="#chemical" type="button" role="tab" aria-controls="chemical" aria-selected="false">
+                                <i class="fas fa-flask me-1"></i> Chemical Composition
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="mechanical-tab" data-bs-toggle="tab" data-bs-target="#mechanical" type="button" role="tab" aria-controls="mechanical" aria-selected="false">
+                                <i class="fas fa-cogs me-1"></i> Mechanical Properties
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="additional-tab" data-bs-toggle="tab" data-bs-target="#additional" type="button" role="tab" aria-controls="additional" aria-selected="false">
+                                <i class="fas fa-clipboard-list me-1"></i> Additional Info
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="analysisTabsContent">
+                        <!-- Tabs content will remain here but hidden -->
+                    
+                    <!-- Material Info Tab -->
+                    <div class="tab-pane fade" id="material" role="tabpanel" aria-labelledby="material-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                {% if data.material_info %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>Property</th>
+                                                    <th>Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for key, value in data.material_info.items() %}
+                                                    <tr>
+                                                        <td>{{ key|replace('_', ' ')|title }}</td>
+                                                        <td>
+                                                            {% if value is iterable and value is not string %}
+                                                                {{ value|join(', ') }}
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        No material information available.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chemical Composition Tab -->
+                    <div class="tab-pane fade" id="chemical" role="tabpanel" aria-labelledby="chemical-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                {% if chemical_composition.requirements and chemical_composition.products %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped table-bordered" id="chemicalTable">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Element</th>
+                                                    <th class="bg-light">Specification Requirement</th>
+                                                    {% for product in chemical_composition.products %}
+                                                        <th>{{ product.product_id }}</th>
+                                                    {% endfor %}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for element, requirement in chemical_composition.requirements.items() %}
+                                                    <tr>
+                                                        <th>{{ element }}</th>
+                                                        <td class="bg-light fw-bold">{{ requirement }}</td>
+                                                        {% for product in chemical_composition.products %}
+                                                            {% if product.values is mapping %}
+                                                                <td class="value-cell" 
+                                                                    data-requirement="{{ requirement }}" 
+                                                                    data-value="{{ product.values.get(element, '-') }}">
+                                                                    {{ product.values.get(element, '-') }}
+                                                                </td>
+                                                            {% else %}
+                                                                <td class="value-cell" data-requirement="{{ requirement }}" data-value="-">-</td>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        No chemical composition data available.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mechanical Properties Tab -->
+                    <div class="tab-pane fade" id="mechanical" role="tabpanel" aria-labelledby="mechanical-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                {% if mechanical_properties.requirements and mechanical_properties.products %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped table-bordered" id="mechanicalTable">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Property</th>
+                                                    <th class="bg-light">Specification Requirement</th>
+                                                    {% for product in mechanical_properties.products %}
+                                                        <th>{{ product.product_id }}</th>
+                                                    {% endfor %}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for property, requirement in mechanical_properties.requirements.items() %}
+                                                    <tr>
+                                                        <th>{{ property }}</th>
+                                                        <td class="bg-light fw-bold">{{ requirement }}</td>
+                                                        {% for product in mechanical_properties.products %}
+                                                            {% if product.values is mapping %}
+                                                                <td class="value-cell" 
+                                                                    data-requirement="{{ requirement }}" 
+                                                                    data-value="{{ product.values.get(property, '-') }}">
+                                                                    {{ product.values.get(property, '-') }}
+                                                                </td>
+                                                            {% else %}
+                                                                <td class="value-cell" data-requirement="{{ requirement }}" data-value="-">-</td>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        No mechanical properties data available.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Info Tab -->
+                    <div class="tab-pane fade" id="additional" role="tabpanel" aria-labelledby="additional-tab">
+                        <div class="card">
+                            <div class="card-body">
+                                {% if data.additional_info %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>Property</th>
+                                                    <th>Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for key, value in data.additional_info.items() %}
+                                                    <tr>
+                                                        <td>{{ key|replace('_', ' ')|title }}</td>
+                                                        <td>
+                                                            {% if value is iterable and value is not string %}
+                                                                {{ value|join(', ') }}
+                                                            {% else %}
+                                                                {{ value }}
+                                                            {% endif %}
+                                                        </td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info">
+                                        No additional information available.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Function to determine if a value meets the requirement
+        function checkCompliance(requirement, value) {
+            if (!requirement || !value || value === '-' || value === 'N/A') {
+                return null; // Can't determine compliance
+            }
+            
+            // Clean up the values for comparison
+            const cleanValue = String(value).replace(/\s+/g, '').replace(',', '.');
+            const cleanReq = String(requirement).replace(/\s+/g, '');
+            
+            // If it's a numeric comparison
+            if (/^[<>]=?\s*\d+\.?\d*$/.test(cleanReq)) {
+                // Extract operator and value
+                const match = cleanReq.match(/([<>]=?)(\d+\.?\d*)/);
+                if (match) {
+                    const operator = match[1];
+                    const reqValue = parseFloat(match[2]);
+                    const actualValue = parseFloat(cleanValue);
+                    
+                    if (!isNaN(actualValue)) {
+                        switch(operator) {
+                            case '<': return actualValue < reqValue;
+                            case '<=': return actualValue <= reqValue;
+                            case '>': return actualValue > reqValue;
+                            case '>=': return actualValue >= reqValue;
+                        }
+                    }
+                }
+            }
+            
+            // Check for range with format "min - max"
+            else if (/\d+\.?\d*\s*-\s*\d+\.?\d*/.test(cleanReq)) {
+                const [min, max] = cleanReq.split('-').map(v => parseFloat(v.trim()));
+                const actualValue = parseFloat(cleanValue);
+                
+                if (!isNaN(actualValue) && !isNaN(min) && !isNaN(max)) {
+                    return actualValue >= min && actualValue <= max;
+                }
+            }
+            
+            // For other formats, just return null
+            return null;
+        }
+        
+        // Process all value cells
+        document.querySelectorAll('.value-cell').forEach(cell => {
+            const requirement = cell.getAttribute('data-requirement');
+            const value = cell.getAttribute('data-value');
+            
+            const compliance = checkCompliance(requirement, value);
+            
+            if (compliance === true) {
+                cell.classList.add('table-success');
+            } else if (compliance === false) {
+                cell.classList.add('table-danger');
+            }
+        });
+    });
+</script>
+{% endblock %} 

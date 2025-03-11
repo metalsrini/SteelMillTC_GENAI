@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Raw Text - Steel Mill Test Certificate Analyzer{% endblock %}
+
+{% block header %}
+    Raw Text: {{ job_data.metadata.original_filename }}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Raw Extracted Text</h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-secondary" role="alert">
+            <i class="fas fa-info-circle me-2"></i>This shows the raw text extracted from the Mill Test Certificate, which can help diagnose any issues with data extraction.
+        </div>
+        <div class="bg-light p-3 rounded" style="max-height: 600px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 0.9rem;">
+            {% if job_data.extracted_text %}
+                {{ job_data.extracted_text }}
+            {% else %}
+                <p class="text-muted">No text content available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Certificate Analysis</h5>
+            </div>
+            <div class="card-body">
+                <p>View structured information extracted from this text:</p>
+                <a href="{{ url_for('analysis', job_id=job_data.job_id) }}" class="btn btn-success">
+                    <i class="fas fa-chart-pie me-2"></i>Go to Analysis
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Query Certificate</h5>
+            </div>
+            <div class="card-body">
+                <p>Ask questions about this certificate's content:</p>
+                <a href="{{ url_for('query', job_id=job_data.job_id) }}" class="btn btn-info text-white">
+                    <i class="fas fa-question-circle me-2"></i>Go to Query
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if job_data.metadata %}
+<div class="card">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Processing Metadata</h5>
+    </div>
+    <div class="card-body">
+        <table class="table table-bordered">
+            <tbody>
+                <tr>
+                    <th class="bg-light" style="width: 30%">Job ID</th>
+                    <td><code>{{ job_data.job_id }}</code></td>
+                </tr>
+                <tr>
+                    <th class="bg-light">Original Filename</th>
+                    <td>{{ job_data.metadata.original_filename }}</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">Processed On</th>
+                    <td>{{ job_data.metadata.timestamp|replace('_', ' ')|replace('T', ' ') }}</td>
+                </tr>
+                <tr>
+                    <th class="bg-light">Status</th>
+                    <td>
+                        {% if job_data.metadata.status == 'completed' %}
+                            <span class="badge bg-success">Completed</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ job_data.metadata.status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th class="bg-light">File Type</th>
+                    <td>{{ job_data.metadata.file_extension|upper }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %} 

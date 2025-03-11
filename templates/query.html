@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Query - Steel Mill Test Certificate Analyzer{% endblock %}
+
+{% block header %}
+    Query MTC: {{ job_data.metadata.original_filename }}
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0"><i class="fas fa-question-circle me-2"></i>Query MTC Data</h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle me-2"></i>Ask questions about the analyzed MTC data, such as "What is the tensile strength?" or "Provide the chemical composition in a table format."
+        </div>
+        
+        <form id="query-form">
+            <div class="input-group mb-3">
+                <input type="text" class="form-control" id="query-input" placeholder="e.g., What is the tensile strength?">
+                <button type="submit" class="btn btn-info text-white" id="query-btn">Ask</button>
+            </div>
+        </form>
+        
+        <div class="mt-4">
+            <h6>Common Questions:</h6>
+            <div class="d-flex flex-wrap gap-2">
+                {% for question in common_questions %}
+                    <button class="btn btn-sm btn-outline-info quick-question" data-question="{{ question }}">
+                        {{ question.split('?')[0] }}
+                    </button>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div id="query-results" class="mt-4">
+            <div class="card d-none" id="query-response-card">
+                <div class="card-header">
+                    <strong>Answer:</strong>
+                </div>
+                <div class="card-body">
+                    <p id="query-response"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Certificate Information</h5>
+    </div>
+    <div class="card-body">
+        <p>View detailed certificate analysis:</p>
+        <a href="{{ url_for('analysis', job_id=job_data.job_id) }}" class="btn btn-success">
+            <i class="fas fa-chart-pie me-2"></i>Go to Analysis
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Marked.js for Markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+    $(document).ready(function() {
+        // Configure markdown renderer
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    });
+</script>
+{% endblock %} 
