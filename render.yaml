@@ -2,7 +2,7 @@ services:
   - type: web
     name: mill-test-analyzer
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: ./build.sh
     startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
