@@ -1,12 +1,9 @@
 services:
   - type: web
     name: mill-test-analyzer
-    env: python
-    buildCommand: ./build.sh
-    startCommand: gunicorn app:app
+    env: docker
+    region: oregon
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.9.0
       - key: LLM_WHISPERER_API_KEY
         value: x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU
       - key: LLM_WHISPERER_API_URL
