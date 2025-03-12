@@ -194,4 +194,61 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - OpenAI for providing the language model capabilities
 - Flask for the web framework
 - Contributors and users of the application 
+
+## Deployment on Render.com (Free Tier)
+
+### Prerequisites
+
+- A [Render.com](https://render.com/) account
+- A [GitHub](https://github.com/) account
+
+### Deployment Steps
+
+1. **Fork this repository to your GitHub account**
+
+2. **Sign up for Render.com**
+   - Go to [render.com](https://render.com/)
+   - Sign up for a free account
+
+3. **Create a new Web Service**
+   - Click "New" and select "Web Service"
+   - Connect your GitHub repository
+   - Select the repository containing this application
+
+4. **Configure the Web Service**
+   - Name: mill-test-analyzer (or your preferred name)
+   - Environment: Python
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn app:app --config gunicorn.conf.py`
+
+5. **Add Environment Variables**
+   - LLM_WHISPERER_API_KEY: Your LLMWhisperer API key
+   - LLM_WHISPERER_API_URL: LLMWhisperer API URL
+   - DEEPSEEK_API_KEY: Your DeepSeek API key
+   - DEEPSEEK_BASE_URL: DeepSeek base URL
+   - SECRET_KEY: A secure random string for Flask sessions
+
+6. **Add Persistent Storage**
+   - Navigate to the "Disks" tab
+   - Create a new disk:
+     - Name: mtc-storage
+     - Mount Path: /var/data
+     - Size: 1 GB (minimum)
+
+7. **Deploy the Service**
+   - Click "Create Web Service"
+   - Render will automatically deploy your application
+
+8. **Access Your Application**
+   - Once deployment is complete, you can access your application at the URL provided by Render
+
+## Local Development
+
+1. Clone this repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run the application: `python app.py`
+4. Access the application at [http://localhost:8080](http://localhost:8080)
+
+## License
+
 This project is licensed under the MIT License - see the LICENSE file for details. 

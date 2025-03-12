@@ -26,20 +26,40 @@ from dotenv import load_dotenv
 import jinja2
 import requests
 import copy
+import logging
 
 # Load environment variables
 load_dotenv()
 
 # Configuration
-LLM_WHISPERER_API_KEY = "x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU"
-LLM_WHISPERER_API_URL = "https://llmwhisperer-api.us-central.unstract.com/api/v2"
-DEEPSEEK_API_KEY = "sk-9bc3bf3c65b743828d71149217e668f5"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+LLM_WHISPERER_API_KEY = os.environ.get("LLM_WHISPERER_API_KEY", "x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU")
+LLM_WHISPERER_API_URL = os.environ.get("LLM_WHISPERER_API_URL", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9bc3bf3c65b743828d71149217e668f5")
+DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 # Flask app configuration
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key_for_mtc_analyzer')
-app.config['UPLOAD_FOLDER'] = 'uploads'
+
+# Configure logging
+app.logger.setLevel(logging.INFO)
+if not app.debug:
+    file_handler = logging.FileHandler('app.log')
+    file_handler.setLevel(logging.INFO)
+    app.logger.addHandler(file_handler)
+    app.logger.info('Mill Test Certificate Analyzer startup')
+
+# Check if we're running on Render.com
+if os.path.exists('/var/data'):
+    UPLOAD_FOLDER = '/var/data/uploads'
+    PROCESSED_DIR = '/var/data/processed'
+    app.logger.info('Using Render.com file paths')
+else:
+    UPLOAD_FOLDER = 'uploads'
+    PROCESSED_DIR = 'processed'
+    app.logger.info('Using local file paths')
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'jpg', 'jpeg', 'png'}
 
@@ -56,11 +76,12 @@ def nl2br(value):
 # Ensure upload directory exists
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
+    app.logger.info(f"Created upload directory: {app.config['UPLOAD_FOLDER']}")
 
 # Ensure storage directories exist
-PROCESSED_DIR = 'processed'
 if not os.path.exists(PROCESSED_DIR):
     os.makedirs(PROCESSED_DIR)
+    app.logger.info(f"Created processed directory: {PROCESSED_DIR}")
 
 # Helper functions
 def allowed_file(filename):
@@ -1249,4 +1270,5 @@ def _assess_extraction_quality(data):
     }
 
 if __name__ == '__main__':
+    # Use this for local development
     app.run(debug=True, host='0.0.0.0', port=8080) 
