@@ -2,22 +2,24 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Copy requirements file and install dependencies
+# Copy the build script and make it executable
+COPY build.sh .
+RUN chmod +x build.sh
+
+# Copy requirements file
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Run our build script which handles the dependencies
+RUN ./build.sh
 
 # Copy the application code
 COPY . .
 
-# Create directories for processed jobs
-RUN mkdir -p processed_jobs/temp
-
-# Set environment variables
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
+# Ensure the upload and processed directories exist
+RUN mkdir -p /var/data/uploads /var/data/processed
 
 # Expose the port the app runs on
-EXPOSE 8080
+EXPOSE 10000
 
 # Command to run the application
-CMD ["python", "app.py"] 
+CMD ["gunicorn", "app:app", "--config", "gunicorn.conf.py"] 
