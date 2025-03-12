@@ -21,12 +21,53 @@ import uuid
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 from openai import OpenAI
-from unstract.llmwhisperer import LLMWhispererClientV2
+# from unstract.llmwhisperer import LLMWhispererClientV2
 from dotenv import load_dotenv
 import jinja2
 import requests
 import copy
 import logging
+
+# Mock implementation of LLMWhispererClientV2 for deployment
+class LLMWhispererClientV2:
+    def __init__(self, base_url=None, api_key=None):
+        self.base_url = base_url
+        self.api_key = api_key
+        
+    def whisper(self, file_path, wait_for_completion=True, wait_timeout=300):
+        """Mock implementation that extracts text using a simpler method"""
+        try:
+            import PyPDF2
+            
+            # Check file extension
+            if file_path.lower().endswith('.pdf'):
+                with open(file_path, 'rb') as file:
+                    reader = PyPDF2.PdfReader(file)
+                    text = ""
+                    for page in reader.pages:
+                        text += page.extract_text() + "\n\n"
+                        
+                return {
+                    'extraction': {
+                        'result_text': text
+                    },
+                    'status': 'completed'
+                }
+            else:
+                # For non-PDF files, return a placeholder message
+                return {
+                    'extraction': {
+                        'result_text': "This is a placeholder text. The actual LLMWhisperer package is not available in the deployment environment."
+                    },
+                    'status': 'completed'
+                }
+        except Exception as e:
+            return {
+                'extraction': {
+                    'result_text': f"Error extracting text: {str(e)}"
+                },
+                'status': 'error'
+            }
 
 # Load environment variables
 load_dotenv()
@@ -806,7 +847,6 @@ def generate_certificate_summary(data, chemical_composition, mechanical_properti
         if temper:
             intro += f", Temper: {temper}"
         intro += ") "
-    intro += f"manufactured by <span class='emphasis'>{supplier_info.get('name', 'Unknown Supplier')}</span>. "
     
     if standard:
         intro += f"The material is tested and certified according to the <span class='spec'>{standard}</span> standard. "
