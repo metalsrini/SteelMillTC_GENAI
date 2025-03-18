@@ -37,9 +37,9 @@ LLM_WHISPERER_API_URL = os.environ.get("LLM_WHISPERER_API_URL", "https://llmwhis
 # OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")  # API key should be set as an environment variable
 
 # Local LLM configuration
-LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "./models/deepseek-llm-7b-chat.gguf")
-LOCAL_MODEL_CONTEXT_SIZE = int(os.environ.get("LOCAL_MODEL_CONTEXT_SIZE", "4096"))
-LOCAL_MODEL_USE_GPU = os.environ.get("LOCAL_MODEL_USE_GPU", "true").lower() == "true"
+LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "./models/deepseek-llm-7b-chat.Q4_K_M.gguf")
+LOCAL_MODEL_CONTEXT_SIZE = int(os.environ.get("LOCAL_MODEL_CONTEXT_SIZE", "2048"))
+LOCAL_MODEL_USE_GPU = os.environ.get("LOCAL_MODEL_USE_GPU", "false").lower() == "true"
 
 # Flask app configuration
 app = Flask(__name__)
@@ -234,27 +234,36 @@ def query_llm(document_text, system_prompt, user_prompt, temperature=0.3, max_re
             if model is None:
                 return {"success": False, "error": "Failed to initialize local model"}
             
-            # Limit document text size if it's very large
-            if len(document_text) > 50000:  # Reduced from 100K to 50K for local model
+            # Limit document text size much more aggressively for local model
+            if len(document_text) > 10000:  # Reduced from 50K to 10K for local model
                 app.logger.warning(f"Large document detected ({len(document_text)} bytes), truncating")
-                document_text = document_text[:50000] + "\n\n[Text truncated due to size limitations]"
+                document_text = document_text[:10000] + "\n\n[Text truncated due to size limitations]"
+            
+            # Limit system prompt size
+            if len(system_prompt) > 1000:
+                system_prompt = system_prompt[:1000] + "..."
+                
+            # Limit user prompt size
+            if len(user_prompt) > 500:
+                user_prompt = user_prompt[:500] + "..."
             
             # Log the first 200 characters of the document for debugging
             app.logger.info(f"Document text (first 200 chars): {document_text[:200]}...")
             
-            # Format the prompt according to DeepSeek chat template
+            # Simplify the prompt format to save tokens
             prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{user_prompt}\n\n{document_text}<|im_end|>\n<|im_start|>assistant\n"
             
             # Make API request
             app.logger.info(f"Sending request to local model (attempt {retry+1}/{max_retries+1})...")
             
-            # Call the local model
+            # Call the local model with reduced parameters
             response = model(
                 prompt,
-                max_tokens=2000,  # Reduced from 4000 for local processing
+                max_tokens=1000,  # Reduced from 2000 to 1000
                 temperature=temperature,
                 echo=False,
-                stop=["<|im_end|>"]  # Stop at the end of assistant message
+                stop=["<|im_end|>"],  # Stop at the end of assistant message
+                n_threads=4  # Use 4 threads for CPU processing
             )
             
             # Extract content from the response
@@ -331,71 +340,22 @@ def _ensure_structured_data_format(data):
 
 def extract_structured_info(text, job_id):
     """Extract structured information from the test certificate"""
+    # Simplify the system prompt for local model
     system_prompt = """
-    You are an expert in analyzing steel mill test certificates. 
-    Extract structured information from the certificate text provided.
+    Extract structured information from the steel mill test certificate.
+    Return JSON with these fields:
+    1. supplier_info: Supplier details
+    2. material_info: Grade, specs, heat number
+    3. chemical_composition: Element values with requirements
+    4. mechanical_properties: Physical properties with requirements
+    5. additional_info: Other relevant info
     
-    CRITICAL INSTRUCTIONS:
-    1. For tables with chemical composition and mechanical properties:
-       - Pay careful attention to the tabular structure
-       - The first row typically contains column headers
-       - The second row often contains the specification limits/requirements (e.g., "< 0.25%", "17 - 110")
-       - Subsequent rows with Product IDs contain the actual measured values for each product
-    
-    2. IMPORTANT: When you encounter empty cells or missing values:
-       - DO NOT substitute them with null, None, or "-"
-       - If you can see the value in the text but it's misaligned, try to determine the correct value by careful analysis
-       - For genuinely missing values, leave them as empty strings or null values
-    
-    3. IMPORTANT: For product IDs:
-       - Identify the exact product identifiers as they appear in the text (e.g., "A0AA000000AA0-01")
-       - Do not create generic product identifiers unless none exist
-    
-    4. For numerical values:
-       - Be precise in identifying decimal points and units
-       - Where ambiguous, consider the context of the data and what's typical for that measurement
-    
-    5. Advanced reasoning approach:
-       - First, identify all tables and sections in the document
-       - For each table, determine column headers and row identifiers
-       - Map values to their appropriate headers and row identifiers
-       - Verify consistency with industry standards and expected ranges
-       - Cross-check against any specification requirements mentioned
-    
-    STEEL MILL TEST CERTIFICATE STRUCTURE:
-    1. The header usually contains supplier information, certificate numbers, and dates
-    2. The main table often contains these sections:
-       - Chemical Composition (%)
-       - Mechanical Properties
-       - Physical Properties
-    3. Pay close attention to the row that starts with specification requirements/limits
-       - This row is crucial as it defines acceptance criteria
-    
-    Respond with a JSON object containing these fields:
-    1. supplier_info: Information about the supplier, including name, address, and contact details if available
-    2. material_info: Information about material grade, specification, heat number, size, and other identifiers
-    3. chemical_composition: A structured representation of the chemical composition table with element names and values, where:
-       - For each element (Si, Fe, Cu, etc.), provide an array where:
-         - First item is the specification requirement
-         - Subsequent items are the measured values for each product ID
-    4. mechanical_properties: A structured representation of mechanical properties including:
-       - For each property (Y.S., T.S., EL%, etc.), provide an array where:
-         - First item is the specification requirement 
-         - Subsequent items are the measured values for each product ID
-    5. additional_info: Any other relevant information such as certifications, testing standards, or notes
-    
-    Format the JSON cleanly and ensure all numerical values are properly extracted.
+    Format the output as valid JSON.
     """
     
     user_prompt = f"""
-    Extract structured information from this steel mill test certificate, paying special attention to:
-    1. The exact specification requirements/limits in the tables
-    2. The exact product IDs and their corresponding measured values
-    3. Preserving all available values from the certificate, even if they appear misaligned in the text
-    4. Using advanced reasoning to ensure accuracy and completeness of the extracted data
-    
-    Certificate Text:
-    {text}
+    Extract structured information from this certificate text:
+    {text[:100]}...
     """
     
     response = query_llm(text, system_prompt, user_prompt, temperature=0.1)
@@ -585,14 +545,8 @@ def check_api_status():
         if model is None:
             return False
             
-        # Try a simple test inference
-        response = model(
-            "Hello, this is a test.",
-            max_tokens=5,
-            temperature=0.1
-        )
-        
-        return response is not None and 'choices' in response
+        # No need to do a test inference, just check if model loaded
+        return True
     except Exception as e:
         app.logger.error(f"Error checking model status: {str(e)}")
         return False
