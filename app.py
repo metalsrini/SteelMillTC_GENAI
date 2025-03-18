@@ -5,7 +5,7 @@ Steel Mill Test Certificate Analyzer Web Application
 This application allows users to:
 1. Upload steel mill test certificates
 2. Process them using LLMWhisperer
-3. Extract structured information using DeepSeek LLM
+3. Extract structured information using OpenAI LLM
 4. Chat with the document
 """
 
@@ -24,7 +24,6 @@ from openai import OpenAI
 from unstract.llmwhisperer import LLMWhispererClientV2
 from dotenv import load_dotenv
 import jinja2
-import requests
 import copy
 import logging
 
@@ -34,8 +33,7 @@ load_dotenv()
 # Configuration
 LLM_WHISPERER_API_KEY = os.environ.get("LLM_WHISPERER_API_KEY", "x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU")
 LLM_WHISPERER_API_URL = os.environ.get("LLM_WHISPERER_API_URL", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-9bc3bf3c65b743828d71149217e668f5")
-DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # API key should be set as an environment variable
 
 # Flask app configuration
 app = Flask(__name__)
@@ -84,7 +82,7 @@ def get_file_extension(filename):
 
 # Initialize clients
 def init_llm_client():
-    return OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+    return OpenAI(api_key=OPENAI_API_KEY)
 
 def init_llmwhisperer_client():
     return LLMWhispererClientV2(
@@ -197,21 +195,17 @@ def process_pdf(file_path, original_filename, params=None):
             'error': error_message
         }
 
-# Query DeepSeek LLM
+# Query OpenAI LLM
 def query_llm(document_text, system_prompt, user_prompt, temperature=0.3, max_retries=2, retry_delay=2):
-    """Query the LLM with the document text and prompts"""
+    """Query the OpenAI LLM with the document text and prompts"""
     for retry in range(max_retries + 1):
         try:
             # Check if API key is set
-            if not DEEPSEEK_API_KEY:
-                return {"success": False, "error": "DeepSeek API key is not set"}
+            if not OPENAI_API_KEY:
+                return {"success": False, "error": "OpenAI API key is not set"}
             
-            # Prepare the API request
-            url = "https://api.deepseek.com/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
-            }
+            # Initialize OpenAI client
+            client = init_llm_client()
             
             # Limit document text size if it's very large
             if len(document_text) > 100000:  # If text is larger than 100KB
@@ -235,91 +229,49 @@ def query_llm(document_text, system_prompt, user_prompt, temperature=0.3, max_re
                 """
                 system_prompt = system_prompt.strip() + "\n\n" + json_guidelines
             
-            # Use the default deepseek-chat model
-            payload = {
-                "model": "deepseek-chat",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user", 
-                        "content": user_prompt + "\n\n" + document_text
-                    }
-                ],
-                "temperature": temperature,
-                "max_tokens": 4000,
-                "response_format": { "type": "json_object" } if "JSON" in system_prompt or "json" in system_prompt else None
-            }
+            # Prepare messages for API request
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt + "\n\n" + document_text}
+            ]
             
-            # Remove None values from payload to avoid API errors
-            payload = {k: v for k, v in payload.items() if v is not None}
+            # Make API request
+            app.logger.info(f"Sending request to OpenAI API (attempt {retry+1}/{max_retries+1})...")
             
-            # Make the API request with increased timeout
-            app.logger.info(f"Sending request to DeepSeek API (attempt {retry+1}/{max_retries+1})...")
-            response = requests.post(url, headers=headers, json=payload, timeout=300)  # Increase timeout to 5 minutes
+            # Configure response format for JSON if needed
+            response_format = {"type": "json_object"} if "JSON" in system_prompt or "json" in system_prompt else None
             
-            # Check for successful response
-            if response.status_code == 200:
-                response_data = response.json()
-                app.logger.info("Received successful response from DeepSeek API")
-                
-                # Extract the content from the response
-                content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
-                
-                # Log if the content is empty
-                if not content:
-                    app.logger.warning("Received empty content from DeepSeek API")
-                    if retry < max_retries:
-                        app.logger.info(f"Retrying in {retry_delay} seconds...")
-                        time.sleep(retry_delay)
-                        continue
-                    return {"success": False, "error": "Empty response from LLM"}
-                
-                # Log a preview of the response
-                app.logger.info(f"Response preview: {content[:200]}...")
-                
-                return {"success": True, "content": content}
-            else:
-                error_message = f"DeepSeek API Error: {response.status_code} - {response.text}"
-                app.logger.error(error_message)
-                
-                # Determine if we should retry
+            # Call the OpenAI API
+            response = client.chat.completions.create(
+                model="gpt-4-turbo",  # Using GPT-4 Turbo for better understanding of technical documents
+                messages=messages,
+                temperature=temperature,
+                max_tokens=4000,
+                response_format=response_format
+            )
+            
+            # Extract content from the response
+            content = response.choices[0].message.content
+            
+            # Check for empty content
+            if not content:
+                app.logger.warning("Received empty content from OpenAI API")
                 if retry < max_retries:
-                    # Retry for server errors (5xx) and rate limits (429)
-                    if response.status_code >= 500 or response.status_code == 429:
-                        retry_after = int(response.headers.get('Retry-After', retry_delay))
-                        app.logger.info(f"Retrying in {retry_after} seconds...")
-                        time.sleep(retry_after)
-                        continue
-                
-                return {"success": False, "error": error_message}
-        except requests.exceptions.Timeout:
-            app.logger.error(f"Request to DeepSeek API timed out (attempt {retry+1}/{max_retries+1})")
-            if retry < max_retries:
-                app.logger.info(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                continue
-            return {"success": False, "error": "Request to DeepSeek API timed out after multiple attempts"}
-        except requests.exceptions.ConnectionError as e:
-            app.logger.error(f"Connection error: {str(e)} (attempt {retry+1}/{max_retries+1})")
-            if retry < max_retries:
-                app.logger.info(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                continue
-            return {"success": False, "error": f"Connection error when querying DeepSeek API: {str(e)}"}
+                    time.sleep(retry_delay)
+                    continue
+                return {"success": False, "error": "Received empty content from OpenAI API"}
+            
+            # Return successful response
+            app.logger.info(f"Successfully received response from OpenAI API ({len(content)} chars)")
+            return {"success": True, "content": content}
+            
         except Exception as e:
-            error_message = f"Error querying DeepSeek API: {str(e)}"
-            app.logger.error(error_message)
+            app.logger.error(f"Error querying OpenAI API: {str(e)}")
             if retry < max_retries:
                 app.logger.info(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
-                continue
-            return {"success": False, "error": error_message}
-    
-    # If we get here, all retries have failed
-    return {"success": False, "error": "All retry attempts failed when querying DeepSeek API"}
+            else:
+                return {"success": False, "error": f"Error querying OpenAI API: {str(e)}"}
 
 # Extract structured information
 def _ensure_structured_data_format(data):
@@ -620,11 +572,11 @@ def get_job_data(job_id):
 
 # Check API status
 def check_api_status():
-    """Check if the DeepSeek API is available"""
+    """Check if the OpenAI API is available"""
     try:
         client = init_llm_client()
         response = client.chat.completions.create(
-            model="deepseek-chat",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "Hello"},
                 {"role": "user", "content": "Test"}
