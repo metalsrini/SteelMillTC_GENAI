@@ -33,7 +33,7 @@ load_dotenv()
 # Configuration
 LLM_WHISPERER_API_KEY = os.environ.get("LLM_WHISPERER_API_KEY", "x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU")
 LLM_WHISPERER_API_URL = os.environ.get("LLM_WHISPERER_API_URL", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")  # API key should be set as an environment variable
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")  # API key should be set as an environment variable
 
 # Flask app configuration
 app = Flask(__name__)
@@ -1292,5 +1292,5 @@ def _assess_extraction_quality(data):
 
 if __name__ == '__main__':
     # Check for the ASPNETCORE_PORT environment variable (Azure App Service)
-    port = int(os.environ.get('ASPNETCORE_PORT', 8080))
+    port = int(os.environ.get('ASPNETCORE_PORT', 8081))
     app.run(debug=True, host='0.0.0.0', port=port) 
