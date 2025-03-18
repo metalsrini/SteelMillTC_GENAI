@@ -47,21 +47,23 @@ if not app.debug:
     file_handler = logging.FileHandler('app.log')
     file_handler.setLevel(logging.INFO)
     app.logger.addHandler(file_handler)
-    app.logger.info('Mill Test Certificate Analyzer startup')
+app.logger.info('Mill Test Certificate Analyzer startup')
 
-# Check if we're running on Render.com
+# Working directory for processed files
+PROCESSED_DIR = 'processed_files'
+# Check if running in DigitalOcean
 if os.path.exists('/var/data'):
-    UPLOAD_FOLDER = '/var/data/uploads'
-    PROCESSED_DIR = '/var/data/processed'
-    app.logger.info('Using Render.com file paths')
+    PROCESSED_DIR = '/var/data/processed_files'
+    app.logger.info('Using DO Volumes storage path')
 else:
-    UPLOAD_FOLDER = 'uploads'
-    PROCESSED_DIR = 'processed'
     app.logger.info('Using local file paths')
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
-app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'jpg', 'jpeg', 'png'}
+# Ensure directories exist
+if not os.path.exists(PROCESSED_DIR):
+    os.makedirs(PROCESSED_DIR)
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 
 # Custom Jinja2 filters
 @app.template_filter('nl2br')
@@ -73,19 +75,9 @@ def nl2br(value):
         )
     return value
 
-# Ensure upload directory exists
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
-    app.logger.info(f"Created upload directory: {app.config['UPLOAD_FOLDER']}")
-
-# Ensure storage directories exist
-if not os.path.exists(PROCESSED_DIR):
-    os.makedirs(PROCESSED_DIR)
-    app.logger.info(f"Created processed directory: {PROCESSED_DIR}")
-
 # Helper functions
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_file_extension(filename):
     return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
@@ -101,8 +93,14 @@ def init_llmwhisperer_client():
     )
 
 # Process PDF with LLMWhisperer
-def process_pdf(file_path, original_filename):
-    """Process a PDF file with LLMWhisperer and return the extracted text"""
+def process_pdf(file_path, original_filename, params=None):
+    """Process a PDF file with LLMWhisperer and return the extracted text
+    
+    Args:
+        file_path: Path to the file to process
+        original_filename: Original filename of the uploaded file
+        params: Dictionary of parameters for the LLMWhisperer client
+    """
     
     client = init_llmwhisperer_client()
     
@@ -110,12 +108,43 @@ def process_pdf(file_path, original_filename):
         # Generate a unique ID for this processing job
         job_id = str(uuid.uuid4())
         
+        # Default parameters if none provided
+        if params is None:
+            params = {}
+        
+        # Set up whisper parameters
+        whisper_params = {
+            'file_path': file_path,
+            'wait_for_completion': True,
+            'wait_timeout': 300  # 5 minutes timeout
+        }
+        
+        # Add optional parameters if provided
+        if 'mode' in params:
+            whisper_params['mode'] = params['mode']
+        if 'output_mode' in params:
+            whisper_params['output_mode'] = params['output_mode']
+        if 'line_splitter_tolerance' in params:
+            whisper_params['line_splitter_tolerance'] = float(params['line_splitter_tolerance'])
+        if 'horizontal_stretch_factor' in params:
+            whisper_params['horizontal_stretch_factor'] = float(params['horizontal_stretch_factor'])
+        if 'mark_vertical_lines' in params:
+            whisper_params['mark_vertical_lines'] = params['mark_vertical_lines'] == 'true'
+        if 'mark_horizontal_lines' in params:
+            whisper_params['mark_horizontal_lines'] = params['mark_horizontal_lines'] == 'true'
+        if 'line_splitter_strategy' in params:
+            whisper_params['line_splitter_strategy'] = params['line_splitter_strategy']
+        if 'lang' in params:
+            whisper_params['lang'] = params['lang']
+        
+        # Add page separator
+        whisper_params['page_seperator'] = '<<<'
+        
+        # Log processing parameters
+        app.logger.info(f"Processing file with parameters: {whisper_params}")
+        
         # Process the document
-        result = client.whisper(
-            file_path=file_path,
-            wait_for_completion=True,
-            wait_timeout=300  # 5 minutes timeout
-        )
+        result = client.whisper(**whisper_params)
         
         # Extract text
         if 'extraction' in result and 'result_text' in result['extraction']:
@@ -134,7 +163,8 @@ def process_pdf(file_path, original_filename):
                 'original_filename': original_filename,
                 'timestamp': timestamp,
                 'status': 'completed',
-                'file_extension': get_file_extension(original_filename)
+                'file_extension': get_file_extension(original_filename),
+                'processing_params': params  # Save the processing parameters used
             }
             
             metadata_file = os.path.join(job_dir, 'metadata.json')
@@ -161,85 +191,135 @@ def process_pdf(file_path, original_filename):
             }
     except Exception as e:
         error_message = str(e)
+        app.logger.error(f"Error processing document: {error_message}")
         return {
             'success': False,
             'error': error_message
         }
 
 # Query DeepSeek LLM
-def query_llm(document_text, system_prompt, user_prompt, temperature=0.3):
+def query_llm(document_text, system_prompt, user_prompt, temperature=0.3, max_retries=2, retry_delay=2):
     """Query the LLM with the document text and prompts"""
-    try:
-        # Check if API key is set
-        if not DEEPSEEK_API_KEY:
-            return {"success": False, "error": "DeepSeek API key is not set"}
-        
-        # Prepare the API request
-        url = "https://api.deepseek.com/v1/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
-        }
-        
-        # Log the first 200 characters of the document to help with debugging
-        app.logger.info(f"Document text (first 200 chars): {document_text[:200]}...")
-        
-        # Use the default deepseek-chat model instead of deepseek-reasoner
-        # The reasoner model was causing connection issues
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user", 
-                    "content": user_prompt + "\n\n" + document_text
-                }
-            ],
-            "temperature": temperature,
-            "max_tokens": 4000
-        }
-        
-        # Make the API request with increased timeout
-        app.logger.info("Sending request to DeepSeek API...")
-        response = requests.post(url, headers=headers, json=payload, timeout=180)  # Increase timeout to 3 minutes
-        
-        # Check for successful response
-        if response.status_code == 200:
-            response_data = response.json()
-            app.logger.info("Received successful response from DeepSeek API")
+    for retry in range(max_retries + 1):
+        try:
+            # Check if API key is set
+            if not DEEPSEEK_API_KEY:
+                return {"success": False, "error": "DeepSeek API key is not set"}
             
-            # Extract the content from the response
-            content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            # Prepare the API request
+            url = "https://api.deepseek.com/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+            }
             
-            # Log if the content is empty
-            if not content:
-                app.logger.warning("Received empty content from DeepSeek API")
-                return {"success": False, "error": "Empty response from LLM"}
+            # Limit document text size if it's very large
+            if len(document_text) > 100000:  # If text is larger than 100KB
+                app.logger.warning(f"Large document detected ({len(document_text)} bytes), truncating")
+                document_text = document_text[:100000] + "\n\n[Text truncated due to size limitations]"
             
-            # Log a preview of the response
-            app.logger.info(f"Response preview: {content[:200]}...")
+            # Log the first 200 characters of the document for debugging
+            app.logger.info(f"Document text (first 200 chars): {document_text[:200]}...")
             
-            return {"success": True, "content": content}
-        else:
-            # Log the error
-            error_msg = f"Error from DeepSeek API: {response.status_code} - {response.text}"
-            app.logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-    except requests.exceptions.Timeout:
-        error_msg = "Request to DeepSeek API timed out after 180 seconds"
-        app.logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    except requests.exceptions.ConnectionError as e:
-        error_msg = f"Connection error when querying DeepSeek API: {str(e)}"
-        app.logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    except Exception as e:
-        error_msg = f"Exception when querying LLM: {str(e)}"
-        app.logger.error(error_msg)
-        return {"success": False, "error": error_msg}
+            # Enhance the system prompt for better JSON responses
+            if "JSON" in system_prompt or "json" in system_prompt:
+                # If the prompt already asks for JSON, add specific formatting guidelines
+                json_guidelines = """
+                CRITICAL FORMATTING INSTRUCTIONS:
+                1. Your response MUST be valid JSON that can be parsed with json.loads().
+                2. Do not include any explanations, notes, or text before or after the JSON.
+                3. Ensure all lists and objects are properly closed.
+                4. Do not use trailing commas.
+                5. Use double quotes for all strings, not single quotes.
+                6. Format the output as a valid JSON array or object.
+                """
+                system_prompt = system_prompt.strip() + "\n\n" + json_guidelines
+            
+            # Use the default deepseek-chat model
+            payload = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user", 
+                        "content": user_prompt + "\n\n" + document_text
+                    }
+                ],
+                "temperature": temperature,
+                "max_tokens": 4000,
+                "response_format": { "type": "json_object" } if "JSON" in system_prompt or "json" in system_prompt else None
+            }
+            
+            # Remove None values from payload to avoid API errors
+            payload = {k: v for k, v in payload.items() if v is not None}
+            
+            # Make the API request with increased timeout
+            app.logger.info(f"Sending request to DeepSeek API (attempt {retry+1}/{max_retries+1})...")
+            response = requests.post(url, headers=headers, json=payload, timeout=300)  # Increase timeout to 5 minutes
+            
+            # Check for successful response
+            if response.status_code == 200:
+                response_data = response.json()
+                app.logger.info("Received successful response from DeepSeek API")
+                
+                # Extract the content from the response
+                content = response_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                
+                # Log if the content is empty
+                if not content:
+                    app.logger.warning("Received empty content from DeepSeek API")
+                    if retry < max_retries:
+                        app.logger.info(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        continue
+                    return {"success": False, "error": "Empty response from LLM"}
+                
+                # Log a preview of the response
+                app.logger.info(f"Response preview: {content[:200]}...")
+                
+                return {"success": True, "content": content}
+            else:
+                error_message = f"DeepSeek API Error: {response.status_code} - {response.text}"
+                app.logger.error(error_message)
+                
+                # Determine if we should retry
+                if retry < max_retries:
+                    # Retry for server errors (5xx) and rate limits (429)
+                    if response.status_code >= 500 or response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', retry_delay))
+                        app.logger.info(f"Retrying in {retry_after} seconds...")
+                        time.sleep(retry_after)
+                        continue
+                
+                return {"success": False, "error": error_message}
+        except requests.exceptions.Timeout:
+            app.logger.error(f"Request to DeepSeek API timed out (attempt {retry+1}/{max_retries+1})")
+            if retry < max_retries:
+                app.logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                continue
+            return {"success": False, "error": "Request to DeepSeek API timed out after multiple attempts"}
+        except requests.exceptions.ConnectionError as e:
+            app.logger.error(f"Connection error: {str(e)} (attempt {retry+1}/{max_retries+1})")
+            if retry < max_retries:
+                app.logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                continue
+            return {"success": False, "error": f"Connection error when querying DeepSeek API: {str(e)}"}
+        except Exception as e:
+            error_message = f"Error querying DeepSeek API: {str(e)}"
+            app.logger.error(error_message)
+            if retry < max_retries:
+                app.logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                continue
+            return {"success": False, "error": error_message}
+    
+    # If we get here, all retries have failed
+    return {"success": False, "error": "All retry attempts failed when querying DeepSeek API"}
 
 # Extract structured information
 def _ensure_structured_data_format(data):
@@ -481,48 +561,18 @@ def get_processed_jobs():
         for job_id in os.listdir(PROCESSED_DIR):
             job_dir = os.path.join(PROCESSED_DIR, job_id)
             if os.path.isdir(job_dir):
-                # Look for metadata.json
+                # Get metadata
                 metadata_file = os.path.join(job_dir, 'metadata.json')
                 if os.path.exists(metadata_file):
                     try:
                         with open(metadata_file, 'r', encoding='utf-8') as f:
                             metadata = json.load(f)
-                        
-                        # Check if structured data exists
-                        has_structured_data = metadata.get('has_structured_data', False)
-                        if not has_structured_data:
-                            # Check if the file exists
-                            structured_data_file = os.path.join(job_dir, 'structured_data.json')
-                            has_structured_data = os.path.exists(structured_data_file)
-                        
-                        # Get a title for the job
-                        title = "Mill Test Certificate"
-                        if has_structured_data:
-                            structured_data_file = os.path.join(job_dir, 'structured_data.json')
-                            if os.path.exists(structured_data_file):
-                                try:
-                                    with open(structured_data_file, 'r', encoding='utf-8') as f:
-                                        data = json.load(f)
-                                    if 'material_info' in data and data['material_info']:
-                                        if 'grade' in data['material_info']:
-                                            title = f"{data['material_info']['grade']} Certificate"
-                                        elif 'material_grade' in data['material_info']:
-                                            title = f"{data['material_info']['material_grade']} Certificate"
-                                except:
-                                    pass
-                        
-                        jobs.append({
-                            'job_id': job_id,
-                            'title': title,
-                            'timestamp': metadata.get('timestamp', 'Unknown'),
-                            'original_filename': metadata.get('original_filename', 'Unknown'),
-                            'has_structured_data': has_structured_data
-                        })
-                    except:
-                        pass
+                            jobs.append(metadata)
+                    except Exception as e:
+                        app.logger.error(f"Error loading job metadata: {str(e)}")
     
     # Sort by timestamp (newest first)
-    jobs.sort(key=lambda x: x['timestamp'], reverse=True)
+    jobs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
     
     return jobs
 
@@ -613,8 +663,28 @@ def upload_file():
         file_path = os.path.join(temp_dir, filename)
         file.save(file_path)
         
-        # Process the file
-        result = process_pdf(file_path, filename)
+        # Extract parameters from the form
+        params = {
+            'mode': request.form.get('processing_mode', 'high_quality'),
+            'output_mode': request.form.get('output_mode', 'layout_preserving')
+        }
+        
+        # Add advanced parameters if provided
+        if 'line_splitter_tolerance' in request.form:
+            params['line_splitter_tolerance'] = request.form.get('line_splitter_tolerance')
+        if 'horizontal_stretch_factor' in request.form:
+            params['horizontal_stretch_factor'] = request.form.get('horizontal_stretch_factor')
+        if 'mark_vertical_lines' in request.form:
+            params['mark_vertical_lines'] = request.form.get('mark_vertical_lines')
+        if 'mark_horizontal_lines' in request.form:
+            params['mark_horizontal_lines'] = request.form.get('mark_horizontal_lines')
+        if 'line_splitter_strategy' in request.form:
+            params['line_splitter_strategy'] = request.form.get('line_splitter_strategy')
+        if 'lang' in request.form:
+            params['lang'] = request.form.get('lang')
+        
+        # Process the file with parameters
+        result = process_pdf(file_path, filename, params)
         
         # Clean up
         try:
@@ -632,10 +702,10 @@ def upload_file():
             
             if struct_result['success']:
                 flash('File processed successfully!', 'success')
-                return redirect(url_for('analysis', job_id=result['job_id']))
+                return redirect(url_for('query', job_id=result['job_id']))
             else:
                 flash(f'Text extracted but error in analysis: {struct_result.get("error", "Unknown error")}', 'warning')
-                return redirect(url_for('analysis', job_id=result['job_id']))
+                return redirect(url_for('query', job_id=result['job_id']))
         else:
             flash(f'Error processing file: {result.get("error", "Unknown error")}', 'error')
             return redirect(url_for('index'))
@@ -1269,5 +1339,6 @@ def _assess_extraction_quality(data):
     }
 
 if __name__ == '__main__':
-    # Use this for local development
-    app.run(debug=True, host='0.0.0.0', port=8080) 
+    # Check for the ASPNETCORE_PORT environment variable (Azure App Service)
+    port = int(os.environ.get('ASPNETCORE_PORT', 8080))
+    app.run(debug=True, host='0.0.0.0', port=port) 

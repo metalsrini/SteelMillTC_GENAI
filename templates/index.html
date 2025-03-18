@@ -31,6 +31,92 @@
                         <div id="selected-file-name" class="mt-2 text-primary fw-bold"></div>
                     </div>
                     
+                    <!-- Processing Options -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">LLM Extraction Options</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="processing-mode" class="form-label">Processing Mode</label>
+                                    <select class="form-select" id="processing-mode" name="processing_mode">
+                                        <option value="high_quality" selected>High Quality</option>
+                                        <option value="form">Form</option>
+                                        <option value="low_cost">Low Cost</option>
+                                        <option value="native_text">Native Text</option>
+                                    </select>
+                                    <div class="form-text">Choose extraction method based on document type</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="output-mode" class="form-label">Output Mode</label>
+                                    <select class="form-select" id="output-mode" name="output_mode">
+                                        <option value="layout_preserving" selected>Layout Preserving</option>
+                                        <option value="text">Text Only</option>
+                                    </select>
+                                    <div class="form-text">How to format the extracted text</div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <a class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" href="#advancedOptions" role="button" aria-expanded="false" aria-controls="advancedOptions">
+                                    Advanced Options <i class="fas fa-caret-down"></i>
+                                </a>
+                            </div>
+                            
+                            <div class="collapse mt-3" id="advancedOptions">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="line-splitter-tolerance" class="form-label">Line Splitter Tolerance</label>
+                                        <input type="range" class="form-range" min="0.1" max="1.0" step="0.05" value="0.75" id="line-splitter-tolerance" name="line_splitter_tolerance">
+                                        <div class="d-flex justify-content-between">
+                                            <span>0.1</span>
+                                            <span id="tolerance-value">0.75</span>
+                                            <span>1.0</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="horizontal-stretch" class="form-label">Horizontal Stretch Factor</label>
+                                        <input type="range" class="form-range" min="0.5" max="1.5" step="0.1" value="1.0" id="horizontal-stretch" name="horizontal_stretch_factor">
+                                        <div class="d-flex justify-content-between">
+                                            <span>0.5</span>
+                                            <span id="stretch-value">1.0</span>
+                                            <span>1.5</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="mark-vertical-lines" name="mark_vertical_lines" value="true">
+                                            <label class="form-check-label" for="mark-vertical-lines">
+                                                Mark Vertical Lines
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="mark-horizontal-lines" name="mark_horizontal_lines" value="true">
+                                            <label class="form-check-label" for="mark-horizontal-lines">
+                                                Mark Horizontal Lines
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="line-splitter-strategy" class="form-label">Line Splitter Strategy</label>
+                                        <select class="form-select" id="line-splitter-strategy" name="line_splitter_strategy">
+                                            <option value="left-priority" selected>Left Priority</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="lang" class="form-label">Language</label>
+                                        <select class="form-select" id="lang" name="lang">
+                                            <option value="eng" selected>English</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="row mt-4">
                         <div class="col-md-6">
                             <div id="pdf-preview"></div>
@@ -88,6 +174,35 @@
         if (e.originalEvent.dataTransfer.files.length) {
             $('#file-upload')[0].files = e.originalEvent.dataTransfer.files;
             $('#file-upload').trigger('change');
+        }
+    });
+    
+    // Display slider values
+    $('#line-splitter-tolerance').on('input', function() {
+        $('#tolerance-value').text($(this).val());
+    });
+    
+    $('#horizontal-stretch').on('input', function() {
+        $('#stretch-value').text($(this).val());
+    });
+    
+    // Update processing mode options based on file type
+    $('#file-upload').on('change', function() {
+        const file = this.files[0];
+        if (file) {
+            const extension = file.name.split('.').pop().toLowerCase();
+            const isImage = ['jpg', 'jpeg', 'png'].includes(extension);
+            
+            // For images, default to 'form' mode which often works better
+            if (isImage) {
+                $('#processing-mode').val('form');
+                // Expand advanced options for images
+                if (!$('#advancedOptions').hasClass('show')) {
+                    $('#advancedOptions').collapse('show');
+                }
+            } else {
+                $('#processing-mode').val('high_quality');
+            }
         }
     });
 </script>

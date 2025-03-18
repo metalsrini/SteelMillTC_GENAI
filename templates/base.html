@@ -34,12 +34,6 @@
                         </li>
                         {% if job_id is defined %}
                         <li class="nav-item">
-                            <a class="nav-link {% if '/analysis/' in request.path %}active{% endif %}" href="{{ url_for('analysis', job_id=job_id) }}">
-                                <i class="fas fa-chart-pie me-2"></i>
-                                Analysis
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link {% if '/query/' in request.path %}active{% endif %}" href="{{ url_for('query', job_id=job_id) }}">
                                 <i class="fas fa-question-circle me-2"></i>
                                 Query

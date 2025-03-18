@@ -88,6 +88,65 @@
                     <th class="bg-light">File Type</th>
                     <td>{{ job_data.metadata.file_extension|upper }}</td>
                 </tr>
+                
+                <!-- Extraction Parameters -->
+                {% if job_data.metadata.processing_params %}
+                <tr>
+                    <th class="bg-light" colspan="2">Extraction Parameters</th>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <table class="table table-sm table-striped mb-0">
+                            <tbody>
+                                <tr>
+                                    <th>Processing Mode</th>
+                                    <td>{{ job_data.metadata.processing_params.mode|default('high_quality')|replace('_', ' ')|title }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Output Mode</th>
+                                    <td>{{ job_data.metadata.processing_params.output_mode|default('layout_preserving')|replace('_', ' ')|title }}</td>
+                                </tr>
+                                {% if job_data.metadata.processing_params.line_splitter_tolerance %}
+                                <tr>
+                                    <th>Line Splitter Tolerance</th>
+                                    <td>{{ job_data.metadata.processing_params.line_splitter_tolerance }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if job_data.metadata.processing_params.horizontal_stretch_factor %}
+                                <tr>
+                                    <th>Horizontal Stretch Factor</th>
+                                    <td>{{ job_data.metadata.processing_params.horizontal_stretch_factor }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if job_data.metadata.processing_params.mark_vertical_lines %}
+                                <tr>
+                                    <th>Mark Vertical Lines</th>
+                                    <td>{{ job_data.metadata.processing_params.mark_vertical_lines }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if job_data.metadata.processing_params.mark_horizontal_lines %}
+                                <tr>
+                                    <th>Mark Horizontal Lines</th>
+                                    <td>{{ job_data.metadata.processing_params.mark_horizontal_lines }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if job_data.metadata.processing_params.line_splitter_strategy %}
+                                <tr>
+                                    <th>Line Splitter Strategy</th>
+                                    <td>{{ job_data.metadata.processing_params.line_splitter_strategy|replace('-', ' ')|title }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if job_data.metadata.processing_params.lang %}
+                                <tr>
+                                    <th>Language</th>
+                                    <td>{{ job_data.metadata.processing_params.lang|upper }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
     </div>

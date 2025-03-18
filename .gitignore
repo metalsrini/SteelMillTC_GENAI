@@ -1,61 +1,38 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Flask
-instance/
-.webassets-cache
-
-# Jupyter Notebook
-.ipynb_checkpoints
-*/.ipynb_checkpoints/*
-
-# Virtual Environment
+# Virtual environments
 venv/
-ENV/
 env/
-.env
+ENV/
 
-# OS specific
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Project specific
-processed_jobs/*
-!processed_jobs/.gitkeep
-!processed_jobs/temp/
-processed_jobs/temp/*
-!processed_jobs/temp/.gitkeep
-processed/
-temp/
-processed_certificate.json
-processed_certificate.txt
-extracted_text_*.txt
-structured_data_*.json
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 
 # Logs
-*.log 
+*.log
+app.log
+
+# Temporary files
+tmp/
+temp/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Processed files directory (data)
+processed_files/
+
+# Environment variables
+.env 

@@ -1,2 +1,0 @@
-# This file exists to ensure the processed_jobs directory is included in Git
-# The directory contents are excluded by .gitignore, but the directory structure is needed 

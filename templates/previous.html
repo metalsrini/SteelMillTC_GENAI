@@ -40,15 +40,12 @@
                                     {% endif %}
                                 </p>
                                 <div class="d-grid gap-2">
-                                    <a href="{{ url_for('analysis', job_id=job.job_id) }}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-chart-pie me-1"></i> View Analysis
+                                    <a href="{{ url_for('query', job_id=job.job_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-question-circle me-1"></i> Query Certificate
                                     </a>
                                     <div class="btn-group">
                                         <a href="{{ url_for('raw_text', job_id=job.job_id) }}" class="btn btn-sm btn-outline-secondary">
                                             <i class="fas fa-file-alt me-1"></i> Raw Text
-                                        </a>
-                                        <a href="{{ url_for('query', job_id=job.job_id) }}" class="btn btn-sm btn-outline-info">
-                                            <i class="fas fa-question-circle me-1"></i> Query
                                         </a>
                                     </div>
                                 </div>
