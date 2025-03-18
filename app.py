@@ -20,7 +20,8 @@ import datetime
 import uuid
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
-from openai import OpenAI
+# from openai import OpenAI  # Comment out when using local model
+from llama_cpp import Llama  # Add llama-cpp for local inference
 from unstract.llmwhisperer import LLMWhispererClientV2
 from dotenv import load_dotenv
 import jinja2
@@ -33,7 +34,12 @@ load_dotenv()
 # Configuration
 LLM_WHISPERER_API_KEY = os.environ.get("LLM_WHISPERER_API_KEY", "x6VXn1zLVW9JaYmU63Fsjj4IxrKSsHWaYjvE5re3dQU")
 LLM_WHISPERER_API_URL = os.environ.get("LLM_WHISPERER_API_URL", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")  # API key should be set as an environment variable
+# OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")  # API key should be set as an environment variable
+
+# Local LLM configuration
+LOCAL_MODEL_PATH = os.environ.get("LOCAL_MODEL_PATH", "./models/deepseek-llm-7b-chat.gguf")
+LOCAL_MODEL_CONTEXT_SIZE = int(os.environ.get("LOCAL_MODEL_CONTEXT_SIZE", "4096"))
+LOCAL_MODEL_USE_GPU = os.environ.get("LOCAL_MODEL_USE_GPU", "true").lower() == "true"
 
 # Flask app configuration
 app = Flask(__name__)
@@ -82,7 +88,30 @@ def get_file_extension(filename):
 
 # Initialize clients
 def init_llm_client():
-    return OpenAI(api_key=OPENAI_API_KEY)
+    """Initialize the llama.cpp model for local inference"""
+    try:
+        # Configure GPU usage
+        n_gpu_layers = -1 if LOCAL_MODEL_USE_GPU else 0
+        
+        # Check if model file exists
+        if not os.path.exists(LOCAL_MODEL_PATH):
+            app.logger.error(f"Model file not found at: {LOCAL_MODEL_PATH}")
+            return None
+            
+        # Load the model
+        app.logger.info(f"Loading model from: {LOCAL_MODEL_PATH}")
+        model = Llama(
+            model_path=LOCAL_MODEL_PATH,
+            n_ctx=LOCAL_MODEL_CONTEXT_SIZE,
+            n_gpu_layers=n_gpu_layers,
+            verbose=False
+        )
+        
+        app.logger.info("Model loaded successfully")
+        return model
+    except Exception as e:
+        app.logger.error(f"Error initializing local model: {str(e)}")
+        return None
 
 def init_llmwhisperer_client():
     return LLMWhispererClientV2(
@@ -197,81 +226,59 @@ def process_pdf(file_path, original_filename, params=None):
 
 # Query OpenAI LLM
 def query_llm(document_text, system_prompt, user_prompt, temperature=0.3, max_retries=2, retry_delay=2):
-    """Query the OpenAI LLM with the document text and prompts"""
+    """Query the local LLM with the document text and prompts"""
     for retry in range(max_retries + 1):
         try:
-            # Check if API key is set
-            if not OPENAI_API_KEY:
-                return {"success": False, "error": "OpenAI API key is not set"}
-            
-            # Initialize OpenAI client
-            client = init_llm_client()
+            # Initialize model
+            model = init_llm_client()
+            if model is None:
+                return {"success": False, "error": "Failed to initialize local model"}
             
             # Limit document text size if it's very large
-            if len(document_text) > 100000:  # If text is larger than 100KB
+            if len(document_text) > 50000:  # Reduced from 100K to 50K for local model
                 app.logger.warning(f"Large document detected ({len(document_text)} bytes), truncating")
-                document_text = document_text[:100000] + "\n\n[Text truncated due to size limitations]"
+                document_text = document_text[:50000] + "\n\n[Text truncated due to size limitations]"
             
             # Log the first 200 characters of the document for debugging
             app.logger.info(f"Document text (first 200 chars): {document_text[:200]}...")
             
-            # Enhance the system prompt for better JSON responses
-            if "JSON" in system_prompt or "json" in system_prompt:
-                # If the prompt already asks for JSON, add specific formatting guidelines
-                json_guidelines = """
-                CRITICAL FORMATTING INSTRUCTIONS:
-                1. Your response MUST be valid JSON that can be parsed with json.loads().
-                2. Do not include any explanations, notes, or text before or after the JSON.
-                3. Ensure all lists and objects are properly closed.
-                4. Do not use trailing commas.
-                5. Use double quotes for all strings, not single quotes.
-                6. Format the output as a valid JSON array or object.
-                """
-                system_prompt = system_prompt.strip() + "\n\n" + json_guidelines
-            
-            # Prepare messages for API request
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt + "\n\n" + document_text}
-            ]
+            # Format the prompt according to DeepSeek chat template
+            prompt = f"<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{user_prompt}\n\n{document_text}<|im_end|>\n<|im_start|>assistant\n"
             
             # Make API request
-            app.logger.info(f"Sending request to OpenAI API (attempt {retry+1}/{max_retries+1})...")
+            app.logger.info(f"Sending request to local model (attempt {retry+1}/{max_retries+1})...")
             
-            # Configure response format for JSON if needed
-            response_format = {"type": "json_object"} if "JSON" in system_prompt or "json" in system_prompt else None
-            
-            # Call the OpenAI API
-            response = client.chat.completions.create(
-                model="gpt-4-turbo",  # Using GPT-4 Turbo for better understanding of technical documents
-                messages=messages,
+            # Call the local model
+            response = model(
+                prompt,
+                max_tokens=2000,  # Reduced from 4000 for local processing
                 temperature=temperature,
-                max_tokens=4000,
-                response_format=response_format
+                echo=False,
+                stop=["<|im_end|>"]  # Stop at the end of assistant message
             )
             
             # Extract content from the response
-            content = response.choices[0].message.content
+            content = response['choices'][0]['text'].strip()
             
             # Check for empty content
             if not content:
-                app.logger.warning("Received empty content from OpenAI API")
+                app.logger.warning("Received empty content from local model")
                 if retry < max_retries:
                     time.sleep(retry_delay)
                     continue
-                return {"success": False, "error": "Received empty content from OpenAI API"}
+                return {"success": False, "error": "Received empty content from local model"}
             
             # Return successful response
-            app.logger.info(f"Successfully received response from OpenAI API ({len(content)} chars)")
+            app.logger.info(f"Successfully received response from local model ({len(content)} chars)")
             return {"success": True, "content": content}
             
         except Exception as e:
-            app.logger.error(f"Error querying OpenAI API: {str(e)}")
+            app.logger.error(f"Error querying local model: {str(e)}")
             if retry < max_retries:
                 app.logger.info(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
             else:
-                return {"success": False, "error": f"Error querying OpenAI API: {str(e)}"}
+                return {"success": False, "error": f"Error querying local model: {str(e)}"}
 
 # Extract structured information
 def _ensure_structured_data_format(data):
@@ -572,19 +579,22 @@ def get_job_data(job_id):
 
 # Check API status
 def check_api_status():
-    """Check if the OpenAI API is available"""
+    """Check if the local model is available"""
     try:
-        client = init_llm_client()
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": "Hello"},
-                {"role": "user", "content": "Test"}
-            ],
-            max_tokens=5
+        model = init_llm_client()
+        if model is None:
+            return False
+            
+        # Try a simple test inference
+        response = model(
+            "Hello, this is a test.",
+            max_tokens=5,
+            temperature=0.1
         )
-        return True
-    except:
+        
+        return response is not None and 'choices' in response
+    except Exception as e:
+        app.logger.error(f"Error checking model status: {str(e)}")
         return False
 
 # Routes
